@@ -6,9 +6,11 @@
 # This script locks on a specific EC2 instance tag.
 # Requires:
 # 1. AWS CLI installed
-# 2. AWS executable by cron, cron cannot execute AWS from /usr/local/bin, create a symlink in /usr/bin
-# 3. ec2:CreateTags, ec2:DeleteTags and ec2:DescribeInstances permissions.
+# 2. ec2:CreateTags, ec2:DeleteTags and ec2:DescribeInstances permissions.
 #
+# As the number of servers running this script increases so does the likelihood
+#   that the cron will never execute. MAX_ATTEMPTS should be increased as the
+#   number of instances increases.
 #
 
 # Find the AWS CLI executable
@@ -104,10 +106,11 @@ negotiate () {
         pause
         negotiate
       else
-        log "Max attempts reached. Exiting."
+        log "Max attempts reached. Exiting." "warning"
       fi
     elif [[ "${#CRON_LOCKS[@]}" -eq "1" ]]; then
       ## If CRON_LOCK count is exactly 1 lock is established, run cron
+      log "Running cron command."
       $($CRON_COMMAND)
     fi
   else
@@ -116,14 +119,16 @@ negotiate () {
 }
 
 log () {
- logger -t 'EC2 CRON LOCK' -i "$1"
+  [[ -z "$2" ]] && LOG_PRIORITY=user.notice || LOG_PRIORITY=user.$2
+  logger -t 'EC2 CRON LOCK' -i -p $LOG_PRIORITY "$1"
 }
 
 log "Starting EC2 CRON lock negotiation"
 log "Instance ID: $INSTANCE_ID"
 log "Region: $REGION"
-[[ -z $AWS_EXEC ]] && log "Cannot find AWS CLI executable in $PATH. Exiting" && exit
+[[ -z $AWS_EXEC ]] && log "Cannot find AWS CLI executable in $PATH. Exiting" "error" && exit
 log "AWS CLI Path: $AWS_EXEC"
+log "Command: $CRON_COMMAND"
 
 negotiate
 log "Done EC2 CRON lock negotiation"
